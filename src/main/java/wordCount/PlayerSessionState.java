@@ -12,9 +12,9 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PlayerSessionState {
-    // SessionData
+    // Session
     // EventData (list)
-    SessionData sessionData;
+    Session sessionData;
     List<EventData> eventsData;
 
 
