@@ -1,18 +1,12 @@
-package wordCount;
+package pokerStreaming;
 
 import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
-
 
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.catalyst.expressions.In;
-import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import scala.Boolean;
 import scala.Tuple2;
 
 import org.apache.spark.SparkConf;
@@ -25,8 +19,6 @@ import org.apache.spark.streaming.StateSpec;
 import org.apache.spark.streaming.api.java.*;
 
 import com.google.common.base.Optional;
-
-import javax.xml.bind.SchemaOutputResolver;
 
 
 public class Main {
@@ -49,7 +41,7 @@ public class Main {
 
         // JavaStreamingContext ssc = new JavaStreamingContext(sc, Durations.seconds(5));
         JavaStreamingContext ssc = new JavaStreamingContext(javaSparkContext, Durations.seconds(10));
-        ssc.checkpoint(".");
+        ssc.checkpoint("/home/cloudera/IdeaProjects/spark-streaming-poker/checkpoints/");
 
 
 
@@ -103,7 +95,7 @@ public class Main {
                     // key exists in state
                     if (sessionState.exists()){
 
-                        System.out.println("**********\n \n \n key exists in state \n \n \n**********");
+                        System.out.println("**********\n key exists in state\n**********");
                         session = sessionState.get();
 
                         // Update lastServerDatetime
@@ -113,12 +105,12 @@ public class Main {
                         // Login Event
                         if (Objects.isNull(sessionState.get().loginEvent))
                         {
-                            System.out.println("**********\n \n \n login event NOT exists in state \n \n \n**********");
+                            System.out.println("**********\n login event NOT exists in state\n**********");
                             session.loginEvent = event.get();
                         }
 
                         else
-                            System.out.println("**********\n \n \n login event exists in state \n \n \n**********");
+                            System.out.println("**********\n login event exists in state\n**********");
 
 
                         // Window Event
@@ -139,7 +131,7 @@ public class Main {
                                                 && (event.get().action.equals("close")))
                                         {
                                             // add close data & login data
-                                            System.out.println("**********\n \n \n state: window open; event: close \n \n \n**********");
+                                            System.out.println("**********\n state: window open; event: close\n**********");
 
                                             session.windowEvents.get(i).serverToDateTime = event.get().serverDateTime;
                                             session.windowEvents.get(i).clientToDateTime = event.get().clientDateTime;
@@ -150,6 +142,10 @@ public class Main {
                                             // ...
 
                                             // remove window
+                                            System.out.println("winId: " + session.windowEvents.get(i).windowId.toString());
+                                            System.out.println("startTime: " + session.windowEvents.get(i).serverDateTime.toString());
+                                            System.out.println("endTime: " + session.windowEvents.get(i).serverToDateTime.toString());
+
                                             session.windowEvents.remove(i);
                                             break;
                                         }
@@ -161,7 +157,7 @@ public class Main {
                                                 && (event.get().action.equals("open"))
                                                 && event.get().serverDateTime.isBefore(session.windowEvents.get(i).serverToDateTime))
                                         {
-                                            System.out.println("**********\n \n \n state: window close; event: open; open came before close \n \n \n**********");
+                                            System.out.println("**********\n state: window close; event: open; open came before close\n**********");
 
                                             session.windowEvents.get(i).serverDateTime = event.get().serverDateTime;
                                             session.windowEvents.get(i).clientDateTime = event.get().clientDateTime;
@@ -172,7 +168,6 @@ public class Main {
                                             // ...
 
                                             // remove window
-                                            System.out.println(session.windowEvents.get(i).toString());
                                             session.windowEvents.remove(i);
                                             break;
                                         }
@@ -187,7 +182,7 @@ public class Main {
                             if (!isWindowExistsInState
                                 && event.get().action.equals("open"))
                             {
-                                System.out.println("**********\n \n \n state: no window; event: open\n \n \n**********");
+                                System.out.println("**********\n state: no window; event: open\n**********");
                                 session.windowEvents.add(event.get());
                             }
 
@@ -196,7 +191,7 @@ public class Main {
                             if (!isWindowExistsInState
                                     && event.get().action.equals("close"))
                             {
-                                System.out.println("**********\n \n \n state: no window; event: close\n \n \n**********");
+                                System.out.println("**********\n state: no window; event: close\n**********");
                                 event.get().serverToDateTime=event.get().serverDateTime;
                                 event.get().serverDateTime=null;
                                 event.get().clientToDateTime=event.get().clientDateTime;
@@ -207,7 +202,7 @@ public class Main {
                     }
 
                     else {
-                        System.out.println("**********\n \n \n key NOT exists in state\n \n \n**********");
+                        System.out.println("**********\n key NOT exists in state\n**********");
                         session.loginEvent = event.get();
                         session.lastServerDatetime = event.get().serverDateTime;
                     }

@@ -1,4 +1,4 @@
-package wordCount;
+package toBeDeleted;
 
 /**
  * Created by cloudera on 1/14/17.

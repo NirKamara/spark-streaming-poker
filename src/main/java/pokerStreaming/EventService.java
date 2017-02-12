@@ -1,19 +1,12 @@
-package wordCount;
+package pokerStreaming;
 
-import jdk.nashorn.internal.parser.JSONParser;
 import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.function.*;
-import org.apache.spark.api.java.JavaPairRDD;
 // import org.apache.spark.api.java.Optional;
-import org.apache.spark.api.java.StorageLevels;
 import org.apache.spark.sql.SQLContext;
-import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.State;
-import org.apache.spark.streaming.StateSpec;
 import org.apache.spark.streaming.api.java.*;
-import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
-import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.json.JSONException;
@@ -21,10 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.json.JSONObject;
 import scala.Tuple2;
 
-import java.sql.Timestamp;
 //import java.time.format.DateTimeFormatter;
-import java.util.Objects;
-import java.util.Optional;
 
 
 public class EventService {
@@ -141,7 +131,7 @@ public class EventService {
 
     // validate row
 
-    // write to bigquery
+    // write to big query
 
     // insert into state
 

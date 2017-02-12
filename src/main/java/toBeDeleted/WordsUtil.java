@@ -1,4 +1,4 @@
-package wordCount;
+package toBeDeleted;
 
 import java.text.BreakIterator;
 import java.util.ArrayList;

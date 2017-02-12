@@ -1,10 +1,5 @@
-package wordCount;
+package pokerStreaming;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.streaming.Durations;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
 import org.springframework.stereotype.Component;
 
 

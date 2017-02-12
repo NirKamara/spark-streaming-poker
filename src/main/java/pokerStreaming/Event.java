@@ -1,11 +1,10 @@
-package wordCount;
+package pokerStreaming;
 
 import lombok.Getter;
 import lombok.Setter;
 import org.joda.time.DateTime;
 
 import java.io.Serializable;
-import java.sql.Timestamp;
 
 @Getter
 @Setter
@@ -36,8 +35,4 @@ public class Event implements Serializable {
     String screen;
     String clientVersion;
     String rawDataJSON;
-
-
-
-
 }
