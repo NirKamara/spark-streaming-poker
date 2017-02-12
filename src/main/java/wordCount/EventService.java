@@ -36,6 +36,12 @@ public class EventService {
 
     // parse string to event object
     public static Tuple2 parseStringToTuple2 (String s)
+
+    /**********************************************
+    need to add validations:
+     winId must have value
+     */
+
     {
         try {
             JSONObject obj = new JSONObject(s);

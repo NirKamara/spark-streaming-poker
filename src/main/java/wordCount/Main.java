@@ -6,12 +6,13 @@ import java.util.List;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
+
+
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SQLContext;
 import org.apache.spark.sql.catalyst.expressions.In;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import scala.Boolean;
 import scala.Tuple2;
 
 import org.apache.spark.SparkConf;
@@ -30,13 +31,11 @@ import javax.xml.bind.SchemaOutputResolver;
 
 public class Main {
 
-    private static  org.apache.log4j.Logger log = Logger.getLogger(Main.class);
-
     public static void main(String[] args) throws InterruptedException {
         //AnnotationConfigApplicationContext sparkConf = new AnnotationConfigApplicationContext("sparkConf");
         //InfraService infraService = sparkConf.getBean(InfraService.class);
+        org.apache.log4j.BasicConfigurator.configure();
 
-        log.setLevel(Level.WARN);
 
         SparkConf sparkConf = new SparkConf();
         sparkConf.setAppName("PokerStreamingApp");
@@ -104,24 +103,111 @@ public class Main {
                     // key exists in state
                     if (sessionState.exists()){
 
-                        System.out.println("key exists in state");
+                        System.out.println("**********\n \n \n key exists in state \n \n \n**********");
+                        session = sessionState.get();
 
+                        // Update lastServerDatetime
                         if (event.get().serverDateTime.isAfter(sessionState.get().lastServerDatetime))
                             session.lastServerDatetime = event.get().serverDateTime;
 
                         // Login Event
                         if (Objects.isNull(sessionState.get().loginEvent))
                         {
-                            System.out.println("login event NOT exists in state");
+                            System.out.println("**********\n \n \n login event NOT exists in state \n \n \n**********");
                             session.loginEvent = event.get();
                         }
 
                         else
-                            System.out.println("login event exists in state");
+                            System.out.println("**********\n \n \n login event exists in state \n \n \n**********");
+
+
+                        // Window Event
+                        if (event.get().object.equals("window"))
+                        {
+                            boolean isWindowExistsInState=false;
+                            if (!session.windowEvents.isEmpty())
+                            {
+                                for (int i=0; i<session.windowEvents.size(); i++)
+                                {
+                                    // state: window exists
+                                    if (session.windowEvents.get(i).windowId.equals(event.get().windowId))
+                                    {
+                                        isWindowExistsInState=true;
+                                        // state: window open
+                                        // event: close
+                                        if (session.windowEvents.get(i).action.equals("open")
+                                                && (event.get().action.equals("close")))
+                                        {
+                                            // add close data & login data
+                                            System.out.println("**********\n \n \n state: window open; event: close \n \n \n**********");
+
+                                            session.windowEvents.get(i).serverToDateTime = event.get().serverDateTime;
+                                            session.windowEvents.get(i).clientToDateTime = event.get().clientDateTime;
+                                            session.windowEvents.get(i).clientVersion = event.get().clientVersion;
+                                            session.windowEvents.get(i).screen = event.get().screen;
+
+                                            // write to big query
+                                            // ...
+
+                                            // remove window
+                                            session.windowEvents.remove(i);
+                                            break;
+                                        }
+
+                                        // state: window close
+                                        // event: open
+                                        // open came before close
+                                        if (session.windowEvents.get(i).action.equals("close")
+                                                && (event.get().action.equals("open"))
+                                                && event.get().serverDateTime.isBefore(session.windowEvents.get(i).serverToDateTime))
+                                        {
+                                            System.out.println("**********\n \n \n state: window close; event: open; open came before close \n \n \n**********");
+
+                                            session.windowEvents.get(i).serverDateTime = event.get().serverDateTime;
+                                            session.windowEvents.get(i).clientDateTime = event.get().clientDateTime;
+                                            session.windowEvents.get(i).clientVersion = session.loginEvent.clientVersion;
+                                            session.windowEvents.get(i).screen = session.loginEvent.screen;
+
+                                            // write to big query
+                                            // ...
+
+                                            // remove window
+                                            System.out.println(session.windowEvents.get(i).toString());
+                                            session.windowEvents.remove(i);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+
+
+                            // state: no window
+                            // event: open
+                            if (!isWindowExistsInState
+                                && event.get().action.equals("open"))
+                            {
+                                System.out.println("**********\n \n \n state: no window; event: open\n \n \n**********");
+                                session.windowEvents.add(event.get());
+                            }
+
+                            // state: no window
+                            // event: close
+                            if (!isWindowExistsInState
+                                    && event.get().action.equals("close"))
+                            {
+                                System.out.println("**********\n \n \n state: no window; event: close\n \n \n**********");
+                                event.get().serverToDateTime=event.get().serverDateTime;
+                                event.get().serverDateTime=null;
+                                event.get().clientToDateTime=event.get().clientDateTime;
+                                event.get().clientDateTime=null;
+                                session.windowEvents.add(event.get());
+                            }
+                        }
                     }
 
                     else {
-                        System.out.println("key NOT exists in state");
+                        System.out.println("**********\n \n \n key NOT exists in state\n \n \n**********");
                         session.loginEvent = event.get();
                         session.lastServerDatetime = event.get().serverDateTime;
                     }

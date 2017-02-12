@@ -7,6 +7,7 @@ import org.joda.time.DateTime;
 
 import java.io.Serializable;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.List;
 
 
@@ -16,11 +17,14 @@ import java.util.List;
 
 public class Session implements Serializable{
     Event loginEvent = new Event();
-    List<Event> windowEvents;
+    List<Event> windowEvents = new ArrayList<Event>();
     DateTime lastServerDatetime;
     Integer keepAlivePeriodInSeconds;
 
-    // parse row
+//    public Session processWindowCloseEvent (Integer windowId, Event event, Session session) {
+//
+//    }
 
-    //
+
 }
+
