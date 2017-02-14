@@ -1,8 +1,6 @@
 package pokerStreaming;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 
 import org.apache.spark.api.java.JavaSparkContext;
@@ -92,31 +90,41 @@ public class Main {
 
                     Session session = new Session();
 
+                    ArrayList<String> eventsWithoutDuration = new ArrayList<String>();
+                    eventsWithoutDuration.add("simplifiedView");
+
+
+
                     // key exists in state
                     if (sessionState.exists()){
 
-                        System.out.println("**********\n key exists in state\n**********");
-                        session = sessionState.get();
+                        System.out.println("********** key exists in state **********");
+                        session = sessionState.getOption().get();
 
                         // Update lastServerDatetime
-                        if (event.get().serverDateTime.isAfter(sessionState.get().lastServerDatetime))
+                        if (event.get().serverDateTime.isAfter(sessionState.getOption().get().lastServerDatetime))
                             session.lastServerDatetime = event.get().serverDateTime;
 
                         // Login Event
-                        if (Objects.isNull(sessionState.get().loginEvent))
+                        // state: without login
+                        // event: login
+                        if (event.get().action.equals("login")
+                                && Objects.isNull(session.loginEvent))
                         {
-                            System.out.println("**********\n login event NOT exists in state\n**********");
+
                             session.loginEvent = event.get();
+                            sessionState.update(session);
                         }
 
-                        else
-                            System.out.println("**********\n login event exists in state\n**********");
+
+
 
 
                         // Window Event
                         if (event.get().object.equals("window"))
                         {
                             boolean isWindowExistsInState=false;
+
                             if (!session.windowEvents.isEmpty())
                             {
                                 for (int i=0; i<session.windowEvents.size(); i++)
@@ -131,22 +139,23 @@ public class Main {
                                                 && (event.get().action.equals("close")))
                                         {
                                             // add close data & login data
-                                            System.out.println("**********\n state: window open; event: close\n**********");
+                                            System.out.println("********** state: window open; event: close **********");
 
                                             session.windowEvents.get(i).serverToDateTime = event.get().serverDateTime;
                                             session.windowEvents.get(i).clientToDateTime = event.get().clientDateTime;
+                                            session.windowEvents.get(i).closeReason = event.get().closeReason;
                                             session.windowEvents.get(i).clientVersion = event.get().clientVersion;
                                             session.windowEvents.get(i).screen = event.get().screen;
 
                                             // write to big query
+                                            EventService.writeToDestination(session.windowEvents.get(i));
+
+                                            // close widgets if exists
                                             // ...
 
-                                            // remove window
-                                            System.out.println("winId: " + session.windowEvents.get(i).windowId.toString());
-                                            System.out.println("startTime: " + session.windowEvents.get(i).serverDateTime.toString());
-                                            System.out.println("endTime: " + session.windowEvents.get(i).serverToDateTime.toString());
-
+                                            // update state - remove window
                                             session.windowEvents.remove(i);
+                                            sessionState.update(session);
                                             break;
                                         }
 
@@ -165,10 +174,11 @@ public class Main {
                                             session.windowEvents.get(i).screen = session.loginEvent.screen;
 
                                             // write to big query
-                                            // ...
+                                            EventService.writeToDestination(session.windowEvents.get(i));
 
                                             // remove window
                                             session.windowEvents.remove(i);
+                                            sessionState.update(session);
                                             break;
                                         }
                                     }
@@ -183,7 +193,11 @@ public class Main {
                                 && event.get().action.equals("open"))
                             {
                                 System.out.println("**********\n state: no window; event: open\n**********");
+                                EventService.writeToDestination(event.get());
+
                                 session.windowEvents.add(event.get());
+
+                                sessionState.update(session);
                             }
 
                             // state: no window
@@ -197,23 +211,60 @@ public class Main {
                                 event.get().clientToDateTime=event.get().clientDateTime;
                                 event.get().clientDateTime=null;
                                 session.windowEvents.add(event.get());
+
+                                sessionState.update(session);
                             }
+                        }
+
+                        // Logout event
+                        // state: login exists
+                        // event: logout action
+                        if (event.get().action.equals("logout")
+                                && !Objects.isNull(session.loginEvent))
+                        {
+                            session.loginEvent.serverToDateTime = event.get().serverDateTime;
+                            session.loginEvent.clientToDateTime = event.get().clientDateTime;
+
+                            // write to big query
+                            EventService.writeToDestination(session.loginEvent);
+
+                            // Update state
+                            sessionState.update(session);
+
+
+
+                            // close open widgets
+                            // ...
+
+                            // close open widows
+                            // ...
+
+                        }
+
+                        if (eventsWithoutDuration.contains(event.get().object))
+                        {
+                            event.get().clientVersion = session.loginEvent.clientVersion;
+                            event.get().screen = session.loginEvent.screen;
+
+                            // write to big query
+                            EventService.writeToDestination(event.get());
+
+                            // update last event datetime to state
+                            sessionState.update(session);
                         }
                     }
 
                     else {
-                        System.out.println("**********\n key NOT exists in state\n**********");
+                        System.out.println("********** key NOT exists in state **********");
                         session.loginEvent = event.get();
                         session.lastServerDatetime = event.get().serverDateTime;
+
+                        // write to big query
+                        EventService.writeToDestination(session.loginEvent);
+
+                        // Update state
+                        sessionState.update(session);
                     }
-
-
-
-                    sessionState.update(session);
-                    System.out.println("**************************" +
-                            "state was updated" +
-                            "**************************");
-                    System.out.println(sessionState);
 
                     return new Tuple2<>(playerSessionId, session);
 
@@ -264,6 +315,7 @@ public class Main {
         // DStream made of get cumulative counts that get updated in every batch
         JavaMapWithStateDStream<Integer, Optional<Event>, Session, Tuple2<Integer, Session>> stateDstream =
                 javaPairDStream.mapWithState(StateSpec.function(mappingFunc).initialState(initialRDD));
+
 
         stateDstream.print();
         ssc.start();

@@ -28,11 +28,13 @@ public class Event implements Serializable {
     DateTime clientToDateTime;
     DateTime serverDateTime;
     DateTime serverToDateTime;
-    Integer closeReason;
+    String closeReason;
     String gameFormat;
+    boolean isSnG;
     Integer isSnap;
-    Integer IsBlast;
+    Integer isBlast;
     String screen;
     String clientVersion;
-    String rawDataJSON;
+    String rawDataJSON1;
+    String rawDataJSON2;
 }
