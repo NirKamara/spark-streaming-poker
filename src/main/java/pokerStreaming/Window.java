@@ -1,9 +1,10 @@
-package toBeDeleted;
+package pokerStreaming;
 
 import lombok.Getter;
 import pokerStreaming.Event;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.List;
 
 
@@ -14,6 +15,6 @@ import java.util.List;
 
 public class Window implements Serializable {
     Event windowEvent;
-    List<Event> widgetEvents;
+    HashMap<String, Event> widgetEvents = new HashMap<>();
 
 }

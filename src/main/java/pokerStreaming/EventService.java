@@ -16,8 +16,7 @@ import scala.Array;
 import scala.Double;
 import scala.Tuple2;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 //import java.time.format.DateTimeFormatter;
 
@@ -30,7 +29,7 @@ public class EventService {
     private SQLContext sqlContext;
 
     // parse string to event object
-    public static Tuple2 parseStringToTuple2(String s)
+    public static ArrayList<Tuple2<Integer, Event>> parseStringToTuple2(String s)
 
     /**********************************************
      need to add validations:
@@ -39,8 +38,10 @@ public class EventService {
 
     {
         try {
-            JSONObject obj = new JSONObject(s);
+            ArrayList<Tuple2<Integer, Event>> tupleEvents = new ArrayList<>();
             Event event = new Event();
+            JSONObject obj = new JSONObject(s);
+
 
             DateTimeFormatter fmt = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").withZoneUTC();
 
@@ -62,12 +63,12 @@ public class EventService {
             // Event Attributes
 
             // object
-            if (!obj.getJSONObject("event").isNull("object"))
-                event.object = obj.getJSONObject("event").getString("object");
+            event.object = (!obj.getJSONObject("event").isNull("object")) ?
+                    obj.getJSONObject("event").getString("object") : "";
 
             // objectType
-            if (!obj.getJSONObject("event").isNull("objectType"))
-                event.object = obj.getJSONObject("event").getString("objectType");
+            event.objectType = (!obj.getJSONObject("event").isNull("objectType")) ?
+                 obj.getJSONObject("event").getString("objectType") : "";
 
             // action
             if (!obj.getJSONObject("event").isNull("action")) {
@@ -76,6 +77,7 @@ public class EventService {
                 }
                 event.action = obj.getJSONObject("event").getString("action");
             }
+            else event.action = "";
 
             // windowId
             if (!obj.getJSONObject("event").isNull("winId"))
@@ -101,8 +103,7 @@ public class EventService {
             if (!obj.getJSONObject("event").isNull("tableId"))
                 event.gameFormat = "Ring";
 
-            else if (!obj.getJSONObject("event").isNull("tourId")
-                    && !obj.getJSONObject("event").isNull("tourId")) {
+            else if (!obj.getJSONObject("event").isNull("tourId")) {
                 if (event.isSnG)
                     event.gameFormat = "SnG";
                 else
@@ -143,34 +144,61 @@ public class EventService {
                 event.closeReason = obj.getJSONObject("event").getString("endReason");
 
             // screen
-            if (!obj.getJSONObject("event").isNull("screen"))
+            if (!obj.getJSONObject("event").isNull("screen")) {
                 event.screen = obj.getJSONObject("event").getString("screen");
-
-            // screen1Width
-//            if (!obj.getJSONObject("event").isNull("screen"))
-//                event.screen = obj.getJSONObject("event").getString("screen");
-//
-//            // screen1Height
-//            if (!obj.getJSONObject("event").isNull("screen"))
-//                event.screen = obj.getJSONObject("event").getString("screen");
+                String screen1 = obj.getJSONObject("event").getString("screen").split(";")[0];
+                event.screen1Width = Integer.parseInt(screen1.substring(screen1.indexOf("w")+1, screen1.indexOf("_",3)));
+                event.screen1Height = Integer.parseInt(screen1.substring(screen1.indexOf("h")+1));
+            }
 
             // clientVersion
             if (!obj.getJSONObject("event").isNull("versionId"))
-                event.screen = obj.getJSONObject("event").getString("versionId");
+                event.clientVersion = obj.getJSONObject("event").getString("versionId");
 
             // keepAlivePeriod
             if (!obj.getJSONObject("event").isNull("keepAlivePeriod"))
                 event.keepAlivePeriodInSeconds = obj.getJSONObject("event").getInt("keepAlivePeriod");
 
+            // rawDataJSON1
+            event.rawDataJSON1 = obj.toString();
+
+            // preferred_seat
+            if (!obj.getJSONObject("event").isNull("settings")) {
+
+                JSONObject preferredSeat = obj.getJSONObject("event").getJSONObject("settings");
+
+                for (String tableNum : preferredSeat.keySet()) {
+                    Event preferredSeatEvent = new Event(event);
+                    preferredSeatEvent.preferredSeatTableNum = tableNum;
+
+                    tupleEvents.add(new Tuple2<>(event.playerSessionId, preferredSeatEvent));
+                }
+            }
+            else tupleEvents.add(new Tuple2<>(event.playerSessionId, event));
+
             System.out.println("valid json");
-            return new Tuple2<>(event.playerSessionId, event);
+
+            return tupleEvents;
 
         } catch (JSONException ex) {
             System.out.println("not a valid json");
             System.out.println(ex.getMessage());
-            return new Tuple2<>(-1, "{ \"exception\" : \"not a valid json\" }");
+            System.out.println("{ \"exception\" : \"not a valid json\" }");
+
+            ArrayList<Tuple2<Integer, Event>> tupleException = new ArrayList<>();
+
+            Event eventException = new Event();
+            eventException.objectType = "exception";
+            eventException.object = "exception";
+            eventException.action = "exception";
+
+            tupleException.add(new Tuple2<>(-1, eventException));
+
+            return tupleException;
         }
     }
+
+
 
 
     // validate row
@@ -180,10 +208,25 @@ public class EventService {
     {
         // will be changed in the future to big query destination
         System.out.println("\nstart event data");
+
         System.out.println("  object: " + event.object);
+        System.out.println("  objectType: " + event.objectType);
         System.out.println("  action: " + event.action);
         System.out.println("  serverDateTime: " + event.serverDateTime);
         System.out.println("  serverToDateTime: " + event.serverToDateTime);
+        System.out.println("  screen: " + event.screen);
+        System.out.println("  screen width: " + event.screen1Width);
+        System.out.println("  screen height: " + event.screen1Height);
+        System.out.println("  clientVersion: " + event.clientVersion);
+        System.out.println("  cid: " + event.cid);
+        System.out.println("  windowId: " + event.windowId);
+        System.out.println("  gameFormat: " + event.gameFormat);
+        System.out.println("  isSnap: " + event.isSnap);
+        System.out.println("  isSnG: " + event.isSnG);
+        System.out.println("  isBlast: " + event.isBlast);
+        System.out.println("  preferredSeatTableNum: " + event.preferredSeatTableNum);
+        System.out.println("  rawJson: " + event.rawDataJSON1);
+
         System.out.println("end event data");
     }
 

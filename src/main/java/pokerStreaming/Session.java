@@ -5,8 +5,10 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.joda.time.DateTime;
 
+import java.io.InterruptedIOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 
 
@@ -14,16 +16,18 @@ import java.util.List;
 @NoArgsConstructor
 @Data
 
-public class Session implements Serializable{
+public class Session implements Serializable {
     Event loginEvent = new Event();
-    List<Event> windowEvents = new ArrayList<Event>();
+    HashMap<Integer, Window> windowEvents = new HashMap<>();
     DateTime lastServerDatetime;
     Integer keepAlivePeriodInSeconds;
+}
 
 //    public Session processWindowCloseEvent (Integer windowId, Event event, Session session) {
 //
 //    }
 
 
-}
+
+
 
