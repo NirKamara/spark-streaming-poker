@@ -1,40 +1,16 @@
 package pokerStreaming;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.*;
-// import org.apache.spark.api.java.Optional;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.streaming.State;
-import org.apache.spark.streaming.api.java.*;
-import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.json.JSONException;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.json.JSONObject;
-import scala.Array;
-import scala.Double;
 import scala.Tuple2;
-
 import java.util.*;
 
-//import java.time.format.DateTimeFormatter;
 
+class EventService {
 
-public class EventService {
-
-    // setup spark conf
-    @Autowired
-    private SparkConf sc;
-    private SQLContext sqlContext;
-
-    // parse string to event object
-    public static ArrayList<Tuple2<Integer, Event>> parseStringToTuple2(String s)
-
-    /**********************************************
-     need to add validations:
-     winId must have value
-     */
+    static Iterator<Tuple2<Integer, Event>> parseStringToTuple2(String s)
 
     {
         try {
@@ -42,11 +18,9 @@ public class EventService {
             Event event = new Event();
             JSONObject obj = new JSONObject(s);
 
-
             DateTimeFormatter fmt = DateTimeFormat.forPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZ").withZoneUTC();
 
             // User Attributes
-
             // playerSessionId
             if (!obj.getJSONObject("user").isNull("playerSessionId"))
                 event.playerSessionId = obj.getJSONObject("user").getInt("playerSessionId");
@@ -61,7 +35,6 @@ public class EventService {
 
 
             // Event Attributes
-
             // object
             event.object = (!obj.getJSONObject("event").isNull("object")) ?
                     obj.getJSONObject("event").getString("object") : "";
@@ -96,8 +69,8 @@ public class EventService {
                 event.snapInstanceId = obj.getJSONObject("event").getInt("snapInstanceId");
 
             // isSnG
-            if (!obj.getJSONObject("event").isNull("isSitAndGol"))
-                event.isSnG = obj.getJSONObject("event").getString("isSitAndGol").equals("true");
+            if (!obj.getJSONObject("event").isNull("isSitAndGo"))
+                event.isSnG = obj.getJSONObject("event").getString("isSitAndGo").equals("true");
 
             // gameFormat
             if (!obj.getJSONObject("event").isNull("tableId"))
@@ -171,6 +144,7 @@ public class EventService {
                     Event preferredSeatEvent = new Event(event);
                     preferredSeatEvent.preferredSeatTableNum = tableNum;
 
+
                     tupleEvents.add(new Tuple2<>(event.playerSessionId, preferredSeatEvent));
                 }
             }
@@ -178,7 +152,7 @@ public class EventService {
 
             System.out.println("valid json");
 
-            return tupleEvents;
+            return tupleEvents.iterator();
 
         } catch (JSONException ex) {
             System.out.println("not a valid json");
@@ -192,19 +166,14 @@ public class EventService {
             eventException.object = "exception";
             eventException.action = "exception";
 
-            tupleException.add(new Tuple2<>(-1, eventException));
+            tupleException.add(new Tuple2<Integer, Event>(-1, eventException));
 
-            return tupleException;
+            return tupleException.iterator();
         }
     }
 
-
-
-
-    // validate row
-
     // write to big query
-    public static void writeToDestination(Event event)
+    static void writeToDestination(Event event)
     {
         // will be changed in the future to big query destination
         System.out.println("\nstart event data");
@@ -229,11 +198,4 @@ public class EventService {
 
         System.out.println("end event data");
     }
-
-    // insert into state
-
-    // remove from state
-
-
-
 }

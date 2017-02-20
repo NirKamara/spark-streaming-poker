@@ -23,11 +23,6 @@ public class Session implements Serializable {
     Integer keepAlivePeriodInSeconds;
 }
 
-//    public Session processWindowCloseEvent (Integer windowId, Event event, Session session) {
-//
-//    }
-
-
 
 
 

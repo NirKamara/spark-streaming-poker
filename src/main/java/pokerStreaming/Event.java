@@ -1,7 +1,6 @@
 package pokerStreaming;
 
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.joda.time.DateTime;
 
@@ -42,11 +41,11 @@ public class Event implements Serializable, Cloneable {
     String rawDataJSON1;
     String rawDataJSON2;
 
-    public Event() {
+    Event() {
 
     }
 
-    public Event (Event originalEvent) {
+    Event(Event originalEvent) {
         this.preferredSeatTableNum = originalEvent.preferredSeatTableNum;
         this.object = originalEvent.object;
         this.action= originalEvent.action;

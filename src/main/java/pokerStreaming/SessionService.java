@@ -1,17 +1,135 @@
 package pokerStreaming;
 
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function3;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.State;
-import toBeDeleted.Widget;
+import org.apache.spark.streaming.StateSpec;
+import org.apache.spark.streaming.api.java.JavaMapWithStateDStream;
+import org.apache.spark.streaming.api.java.JavaPairDStream;
+import org.apache.spark.streaming.api.java.JavaReceiverInputDStream;
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.springframework.stereotype.Component;
+import scala.Tuple2;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Objects;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
 
 
-public class SessionService {
+@Component
+class SessionService {
 
-    public static void openLogin (Event event, State<Session> sessionState) {
+    public static void initSpark() throws InterruptedException, IOException {
+
+        // load attributes from configuration file
+        Properties prop = new Properties();
+        InputStream input = new FileInputStream("config.properties");
+        prop.load(input);
+        final Integer KEEP_ALIVE_PERIOD_IN_SECONDS = 20; // Integer.parseInt(prop.getProperty("keepAlivePeriodInSeconds"));
+
+        // init spark
+        SparkConf sparkConf = new SparkConf();
+        sparkConf.setAppName("PokerStreamingApp");
+        sparkConf.setMaster("local[2]");
+
+        JavaSparkContext javaSparkContext = new JavaSparkContext(sparkConf);
+
+        JavaStreamingContext ssc = new JavaStreamingContext(javaSparkContext, Durations.seconds(5));
+        ssc.checkpoint("/home/cloudera/IdeaProjects/spark-streaming-poker/checkpoints/");
+
+        // Initial state RDD input to mapWithState
+        @SuppressWarnings("unchecked")
+
+        JavaReceiverInputDStream<String> events = ssc.socketTextStream(
+                "localhost", Integer.parseInt("9999"), StorageLevels.MEMORY_AND_DISK_SER_2);
+
+        JavaPairDStream javaPairDStream = events.flatMapToPair(EventService::parseStringToTuple2);
+        javaPairDStream.print();
+
+        Function3<Integer, org.apache.spark.api.java.Optional<Event>, State<Session>, Tuple2<Integer, Session>> mappingFunc =
+                (playerSessionId, event, sessionState) -> {
+
+                    Session session = new Session();
+
+                    if (!sessionState.isTimingOut()) {
+
+                        ArrayList<String> eventsWithoutDuration = new ArrayList<String>();
+                        eventsWithoutDuration.add("simplifiedView");
+                        eventsWithoutDuration.add("disconnect");
+                        eventsWithoutDuration.add("keepAlive");
+
+
+                        // key exists in state (login already arrived)
+                        if (sessionState.exists()) {
+
+                            session = sessionState.get();
+
+                            // Update lastServerDatetime
+                            if (event.get().serverDateTime.isAfter(sessionState.getOption().get().lastServerDatetime))
+                                session.lastServerDatetime = event.get().serverDateTime;
+
+                            // Window Open Event
+                            if (event.get().object.equals("window")
+                                    && event.get().action.equals("open"))
+                                SessionService.openWindow(event.get(), sessionState);
+
+                            // Window Close Event
+                            if (event.get().object.equals("window")
+                                    && event.get().action.equals("close"))
+                                SessionService.closeWindow(event.get(), sessionState);
+
+                            // Widget Open Event
+                            if (event.get().objectType.equals("widget")
+                                    && event.get().action.equals("open"))
+                                SessionService.openWidget(event.get(), sessionState);
+
+                            // Widget Close Event
+                            if (event.get().objectType.equals("widget")
+                                    && event.get().action.equals("close"))
+                                SessionService.closeWidget(event.get(), sessionState);
+
+                            // Preferred Seat Event
+                            if (eventsWithoutDuration.indexOf(event.get().object) != -1)
+                                SessionService.eventWithoutDuration(event.get(), sessionState);
+
+                            // Events Without Duration
+                            if (event.get().object.equals("preferred_seat"))
+                                SessionService.preferredSeat(event.get(), sessionState);
+
+                            // Logout Event
+                            if (event.get().object.equals("logout"))
+                                SessionService.closeLogout(event.get(), sessionState);
+
+                        }
+                        // State: key not in state
+                        // Event: login
+                        else if (event.get().object.equals("login")) {
+                            SessionService.openLogin(event.get(), sessionState);
+                        }
+
+                        return new Tuple2<>(playerSessionId, session);
+                    } else {
+                        System.out.println("Timing out!!");
+                        return new Tuple2<>(playerSessionId, session);
+                    }
+                };
+
+        // DStream made of get cumulative counts that get updated in every batch
+        JavaMapWithStateDStream<Integer, Event, Session, Tuple2<Integer, Session>> stateDstream =
+                javaPairDStream.mapWithState(StateSpec
+                        .function(mappingFunc)
+                        .timeout(Durations.seconds(KEEP_ALIVE_PERIOD_IN_SECONDS)));
+
+        stateDstream.print();
+        ssc.start();
+        ssc.awaitTermination();
+    }
+
+    static void openLogin(Event event, State<Session> sessionState) {
 
         Session session = new Session();
 
@@ -24,7 +142,45 @@ public class SessionService {
         sessionState.update(session);
     }
 
-    public static void closeWidget(Event event, State<Session> sessionState) {
+    static void closeLogout(Event event, State<Session> sessionState) {
+
+        Session session = sessionState.get();
+
+        session.lastServerDatetime = event.serverDateTime;
+
+        session.loginEvent.serverToDateTime = event.serverDateTime;
+        session.loginEvent.clientToDateTime = event.clientDateTime;
+        session.loginEvent.closeReason = event.closeReason;
+        session.loginEvent.rawDataJSON2 = event.rawDataJSON1;
+
+        // close windows if exists (and write to big query)
+        HashMap<Integer, Window> windowEvents;
+        windowEvents = session.windowEvents;
+
+        if (!Objects.isNull(windowEvents)
+                && !windowEvents.isEmpty()) {
+
+            event.objectType = "window";
+            for (Map.Entry<Integer, Window> pair : windowEvents.entrySet()) {
+
+                System.out.println("close window from logout event");
+                System.out.println(pair.getKey());
+
+                event.windowId = pair.getKey();
+                closeWindow(event, sessionState);
+            }
+        }
+
+        // write to big query
+        EventService.writeToDestination(session.loginEvent);
+
+        // update state - remove open windows
+        System.out.println("session removed from state");
+        sessionState.remove();
+
+    }
+
+    static void closeWidget(Event event, State<Session> sessionState) {
 
         Session session = sessionState.get();
 
@@ -70,7 +226,7 @@ public class SessionService {
         }
     }
 
-    public static void openWidget(Event event, State<Session> sessionState) {
+    static void openWidget(Event event, State<Session> sessionState) {
 
         Session session = sessionState.get();
 
@@ -113,7 +269,7 @@ public class SessionService {
         }
     }
 
-    public static void closeWindow(Event event, State<Session> sessionState) {
+    static void closeWindow(Event event, State<Session> sessionState) {
 
         Session session = sessionState.get();
 
@@ -177,7 +333,7 @@ public class SessionService {
         }
     }
 
-    public static void openWindow(Event event, State<Session> sessionState) {
+    static void openWindow(Event event, State<Session> sessionState) {
 
         Session session = sessionState.get();
 
@@ -233,7 +389,7 @@ public class SessionService {
         }
     }
 
-    public static void preferredSeat (Event event, State<Session> sessionState) {
+    static void preferredSeat (Event event, State<Session> sessionState) {
 
         System.out.println("got here");
         Session session = sessionState.get();
@@ -247,7 +403,7 @@ public class SessionService {
         sessionState.update(session);
     }
 
-    public static void eventWithoutDuration (Event event, State<Session> sessionState) {
+    static void eventWithoutDuration (Event event, State<Session> sessionState) {
 
         Session session = sessionState.get();
         session.lastServerDatetime = event.serverDateTime;
